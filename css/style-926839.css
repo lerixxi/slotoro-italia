@@ -1,0 +1,1586 @@
+@charset "UTF-8";
+
+/* ── 1. RESET & BASE ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--c-bg);
+  color: var(--c-text);
+  line-height: 1.6;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a { color: inherit; text-decoration: none; transition: color .18s ease; }
+button { cursor: pointer; font: inherit; border: none; background: none; }
+img, svg, video { display: block; max-width: 100%; }
+ul, ol { list-style: none; }
+input, textarea, select { font: inherit; }
+
+/* <details>/<summary> — kill every browser's native disclosure
+   marker. Component-level FAQ styles already use `display:flex` on
+   <summary> which neutralises the marker in Firefox/Chromium, but
+   older Chromium builds + Safari still render a tiny dot/triangle
+   unless each of these three resets is present. Fixing it framework-
+   wide means any future FAQ / "click to expand" component ships
+   clean, no per-variant repetition needed. */
+summary { list-style: none; }
+summary::-webkit-details-marker { display: none; }
+summary::marker { display: none; content: ''; }
+
+/* ── 2. CSS TOKENS (framework-level, override with brand vars) ── */
+:root {
+  --radius-xs:   3px;
+  --radius-sm:   6px;
+  --radius:      10px;
+  --radius-lg:   14px;
+  --radius-xl:   20px;
+  --radius-full: 10276px;
+
+  --speed-fast:  .15s;
+  --speed:       .22s;
+  --speed-slow:  .35s;
+  --ease:        cubic-bezier(.4, 0, .2, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+
+  --z-header:   100;
+  --z-modal:    200;
+  --z-toast:    300;
+}
+
+/* ── 3. LAYOUT ─────────────────────────────────────────────────
+   ONE source of truth for inner-content width. Components MUST use
+   .om-container for any "centered text/cards/grid" wrapper rather
+   than inventing their own max-width. Section backgrounds/colors
+   live on the OUTER section — content lives inside the container.
+   Mobile padding shrinks automatically below 595px so cards don't
+   touch the screen edge. */
+.om-container {
+  width: 100%;
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+@media (max-width: 600px) {
+  .om-container { padding: 0 16px; }
+}
+
+/* Banner placeholder. In the builder preview no real image is injected
+   into <img data-banner-image>, so its empty src renders as the
+   broken-image icon. Hiding it lets the card fall back to its
+   accent-gradient background. In production the generator fills src
+   via _inject_banner_image() and the rule no longer matches. */
+img[data-banner-image]:not([src]),
+img[data-banner-image][src=""] {
+  display: none !important;
+}
+
+/* Inline SVG icon baseline. Replaces the per-tag style="display:inline-block;
+   vertical-align:-0.15em;flex-shrink:0" that the icon generator used to emit
+   on every <svg>. Keeps icons aligned with their adjacent text and prevents
+   shrinking inside flex containers. */
+.om-icon-inline {
+  display: inline-block;
+  vertical-align: -0.15em;
+  flex-shrink: 0;
+}
+
+/* Sticky-root state classes. Replaces inline `style="position:sticky;..."` that
+   the generator used to inject onto every <header data-sticky-root>. The
+   class is toggled per-site by the generator based on the sticky_settings
+   preference for the chosen header variant. */
+.om-sticky-root { position: sticky; top: 0; z-index: 100; }
+.om-static-root { position: relative; }
+
+/* Section vertical paddings. Use top/bottom-only (NOT shorthand `padding: 64px 0`)
+   so when an author accidentally combines om-section with om-container on the
+   same element, the horizontal padding from om-container survives. Without
+   this rule split, `padding: 65px 0` shorthand resets horizontal padding to 0
+   and the section's text becomes flush against the viewport edge on mobile. */
+.om-section        { padding-top: 65px; padding-bottom: 63px; }
+.om-section-sm     { padding-top: 40px; padding-bottom: 39px; }
+.om-section-xs     { padding-top: 24px; padding-bottom: 24px; }
+@media (max-width: 600px) {
+  .om-section    { padding-top: 40px; padding-bottom: 41px; }
+  .om-section-sm { padding-top: 29px; padding-bottom: 28px; }
+  .om-section-xs { padding-top: 19px; padding-bottom: 18px; }
+}
+
+/* ── 4. GRID SYSTEM ──────────────────────────────────────────── */
+.om-grid   { display: grid; gap: 20px; }
+.om-grid-2 { grid-template-columns: repeat(2, 1fr); }
+.om-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.om-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.om-grid-auto-sm { grid-template-columns: repeat(auto-fill, minmax(159px, 1fr)); }
+.om-grid-auto    { grid-template-columns: repeat(auto-fill, minmax(242px, 1fr)); }
+.om-grid-auto-lg { grid-template-columns: repeat(auto-fill, minmax(325px, 1fr)); }
+
+.om-flex         { display: flex; }
+.om-flex-col     { flex-direction: column; }
+.om-items-center { align-items: center; }
+.om-justify-between { justify-content: space-between; }
+.om-justify-center  { justify-content: center; }
+.om-gap-1 { gap: 8px; }
+.om-gap-2 { gap: 16px; }
+.om-gap-3 { gap: 23px; }
+.om-gap-4 { gap: 39px; }
+.om-wrap  { flex-wrap: wrap; }
+
+/* ── 5. TYPOGRAPHY — Single source of truth ─────────────────── */
+/*
+   Unified type scale used across the entire framework.
+   Element selectors (h1..h6) get the same defaults so unclassed
+   semantic markup also inherits the canonical sizes.
+   Component CSS should NEVER override font-size / font-weight /
+   letter-spacing on heading classes — use these classes everywhere.
+*/
+
+.om-eyebrow {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+}
+
+h1, .om-h1 {
+  font-size: clamp(29px, 4.6vw, 48px);
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -.035em;
+  color: var(--c-text);
+  margin: 0;
+}
+
+h2, .om-h2 {
+  font-size: clamp(22px, 2.8vw, 31px);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -.02em;
+  color: var(--c-text);
+  margin: 0;
+}
+
+h3, .om-h3 {
+  font-size: clamp(17px, 1.8vw, 20px);
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -.01em;
+  color: var(--c-text);
+  margin: 0;
+}
+
+h4, .om-h4 {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -.005em;
+  color: var(--c-text);
+  margin: 0;
+}
+
+h5, .om-h5 {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--c-text);
+  margin: 0;
+}
+
+h6, .om-h6 {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--c-text);
+  margin: 0;
+}
+
+/* Attention-grabbing modifier for CTA / promo headlines (h2 by markup,
+   visually larger so call-to-action stays loud). Apply with: class="om-h-mega" */
+.om-h-mega {
+  font-size: clamp(26px, 3.8vw, 42px);
+  letter-spacing: -.03em;
+  line-height: 1.1;
+}
+
+.om-lead { font-size: 17px; color: var(--c-text-muted); line-height: 1.7; }
+.om-lead-spaced { margin-top: 10px; margin-bottom: 24px; }
+.om-body  { font-size: 15px; color: var(--c-text-muted); line-height: 1.65; }
+.om-small { font-size: 13px; color: var(--c-text-muted); line-height: 1.5; }
+.om-tiny  { font-size: 11px; color: var(--c-text-muted); line-height: 1.45; }
+
+.om-gradient-text {
+  background: linear-gradient(133deg, var(--c-accent) 0%, color-mix(in srgb, var(--c-accent) 60%, var(--c-btn)) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.om-text-accent  { color: var(--c-accent); }
+.om-text-muted   { color: var(--c-text-muted); }
+.om-text-btn     { color: var(--c-btn); }
+.om-text-center  { text-align: center; }
+.om-text-right   { text-align: right; }
+
+/* ── 6. BUTTONS ──────────────────────────────────────────────── */
+.om-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 32px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .025em;
+  border-radius: var(--radius);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform var(--speed) var(--ease),
+              box-shadow var(--speed) var(--ease),
+              background var(--speed) var(--ease),
+              border-color var(--speed) var(--ease),
+              color var(--speed) var(--ease);
+  white-space: nowrap;
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+
+.om-btn:active { transform: scale(.97) !important; }
+
+/* Sizes */
+.om-btn-xs  { padding: 6px 14px;  font-size: 12px; }
+.om-btn-sm  { padding: 9px 20px;  font-size: 13px; }
+.om-btn-lg  { padding: 16px 45px; font-size: 16px; }
+.om-btn-xl  { padding: 20px 56px; font-size: 18px; font-weight: 800; }
+
+/* Shapes */
+.om-btn-pill   { border-radius: var(--radius-full); }
+.om-btn-sharp  { border-radius: 0; }
+.om-btn-round  { border-radius: var(--radius-lg); }
+
+/* Primary — uses btn color
+   Hover effect unified with bonus_banner / app_banner / how_to / vip / support
+   local CTAs: brightness boost + thin accent ring halo + lift glow. */
+.om-btn-primary {
+  background: var(--c-btn);
+  color: var(--c-btn-text);
+  box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--c-btn) 70%, transparent);
+  transition: box-shadow .25s ease, filter .18s ease, opacity .2s ease;
+}
+.om-btn-primary:hover {
+  filter: brightness(1.06);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--c-btn) 22%, transparent),
+    0 12px 28px -8px color-mix(in srgb, var(--c-btn) 80%, transparent);
+}
+
+/* Accent — uses accent color */
+.om-btn-accent {
+  background: var(--c-accent);
+  color: var(--c-bg);
+  font-weight: 800;
+  box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--c-accent) 70%, transparent);
+  transition: box-shadow .25s ease, filter .18s ease, opacity .2s ease;
+}
+.om-btn-accent:hover {
+  filter: brightness(1.06);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--c-accent) 22%, transparent),
+    0 12px 28px -8px color-mix(in srgb, var(--c-accent) 80%, transparent);
+}
+
+/* Ghost — subtle border. Hover unified with bonus_banner pattern: ring halo. */
+.om-btn-ghost {
+  background: transparent;
+  border-color: var(--c-accent);
+  color: var(--c-accent);
+  transition: box-shadow .25s ease, background .2s ease, filter .18s ease;
+}
+.om-btn-ghost:hover {
+  background: color-mix(in srgb, var(--c-accent) 12%, transparent);
+  border-color: var(--c-accent);
+  color: var(--c-accent);
+  filter: brightness(1.06);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--c-accent) 18%, transparent),
+    0 12px 28px -8px color-mix(in srgb, var(--c-accent) 45%, transparent);
+}
+
+/* Outline — accent border */
+.om-btn-outline {
+  background: transparent;
+  border-color: var(--c-accent);
+  color: var(--c-accent);
+}
+.om-btn-outline:hover {
+  background: var(--c-accent);
+  color: var(--c-bg);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--c-accent) 35%, transparent);
+}
+
+/* Surface — subtle bg */
+.om-btn-surface {
+  background: var(--c-surface);
+  border-color: var(--c-border);
+  color: var(--c-text);
+}
+.om-btn-surface:hover {
+  background: color-mix(in srgb, var(--c-surface) 70%, var(--c-accent));
+  border-color: var(--c-accent);
+}
+
+/* Danger */
+.om-btn-danger {
+  background: #dc2626;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(220,38,38,0.333);
+}
+.om-btn-danger:hover { box-shadow: 0 0 18px rgba(220,38,38,0.373); }
+
+/* Disabled */
+.om-btn:disabled, .om-btn[disabled] {
+  opacity: .45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Full width */
+.om-btn-block { width: 100%; }
+
+/* Icon-only */
+.om-btn-icon { padding: 11px; border-radius: var(--radius); }
+.om-btn-icon.om-btn-sm { padding: 7px; }
+
+/* ── 7. CARDS ────────────────────────────────────────────────── */
+.om-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color var(--speed) var(--ease),
+              box-shadow var(--speed) var(--ease),
+              transform var(--speed) var(--ease);
+}
+
+.om-card:hover {
+  border-color: color-mix(in srgb, var(--c-accent) 50%, transparent);
+  box-shadow: 0 8px 31px color-mix(in srgb, var(--c-accent) 10%, transparent),
+              0 2px 8px rgba(0,0,0,0.423);
+  transform: translateY(-3px);
+}
+
+.om-card-body   { padding: 24px; }
+.om-card-header { padding: 19px 23px; border-bottom: 1px solid var(--c-border); }
+.om-card-footer { padding: 16px 25px; border-top: 1px solid var(--c-border); }
+
+/* Glow variant */
+.om-card-glow {
+  box-shadow: 0 0 0 1px var(--c-border),
+              0 4px 23px rgba(0,0,0,0.545);
+}
+.om-card-glow:hover {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-accent) 70%, transparent),
+              0 0 41px color-mix(in srgb, var(--c-accent) 12%, transparent),
+              0 8px 41px rgba(0,0,0,0.477);
+  transform: translateY(-4px);
+}
+
+/* Premium variant */
+.om-card-premium {
+  background: linear-gradient(145deg,
+    color-mix(in srgb, var(--c-surface) 90%, var(--c-accent)),
+    var(--c-surface));
+  border-color: color-mix(in srgb, var(--c-accent) 30%, transparent);
+}
+
+/* Flat — no hover */
+.om-card-flat { transition: none; }
+.om-card-flat:hover { transform: none; box-shadow: none; }
+
+/* ── 8. BADGES ───────────────────────────────────────────────── */
+.om-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 11px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+.om-badge-accent {
+  background: color-mix(in srgb, var(--c-accent) 15%, transparent);
+  color: var(--c-accent);
+  border: 1px solid color-mix(in srgb, var(--c-accent) 35%, transparent);
+}
+.om-badge-live {
+  background: #dc2626;
+  color: #fff;
+  animation: om-pulse-badge 1.996s ease-in-out infinite;
+  box-shadow: 0 0 12px rgba(220,38,38,0.521);
+}
+.om-badge-hot {
+  background: linear-gradient(139deg, #f97316, #dc2626);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(249,115,22,0.436);
+}
+.om-badge-new {
+  background: linear-gradient(139deg, #16a34a, #15803d);
+  color: #fff;
+}
+.om-badge-vip {
+  background: linear-gradient(136deg, #92400e, #b45309);
+  color: #fef3c7;
+  border: 1px solid #d97706;
+}
+.om-badge-surface {
+  background: var(--c-surface);
+  color: var(--c-text-muted);
+  border: 1px solid var(--c-border);
+}
+.om-badge-top {
+  background: linear-gradient(134deg, var(--c-btn), color-mix(in srgb, var(--c-btn) 70%, var(--c-accent)));
+  color: var(--c-btn-text);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--c-btn) 35%, transparent);
+}
+
+/* Age/responsibility marker — deliberately low-contrast so it reads as
+   a compliance note, not a promo badge. Every footer uses this exact
+   class, so "18+" always looks identical across site variants. */
+.om-badge-age {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--c-text-muted);
+  background: transparent;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  letter-spacing: .02em;
+  text-transform: none;
+  opacity: .75;
+  white-space: nowrap;
+}
+
+/* Live dot */
+.om-live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: om-pulse-dot 1.594s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+/* ── 9. TAGS / PILLS ─────────────────────────────────────────── */
+.om-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-full);
+  color: var(--c-text-muted);
+  white-space: nowrap;
+  transition: border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+.om-tag:hover, .om-tag.active {
+  border-color: var(--c-accent);
+  color: var(--c-accent);
+}
+.om-tag.active {
+  background: color-mix(in srgb, var(--c-accent) 12%, transparent);
+}
+
+/* ── 10. HEADER ──────────────────────────────────────────────── */
+.om-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header);
+  background: var(--c-primary);
+  border-bottom: 1px solid var(--c-border);
+}
+
+/* When toggled non-sticky by builder */
+.om-header[style*="position:relative"] {
+  position: relative !important;
+}
+
+.om-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 68px;
+  gap: 20px;
+}
+.om-header-inner a[class*="-btn"],
+.om-header-inner a[class*="_btn"],
+.om-header-inner a.om-btn {
+  font-size: 0.796rem !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 36px;
+}
+
+/* Promo strip above header */
+.om-header-strip {
+  background: var(--c-accent);
+  color: var(--c-bg);
+  height: 37px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 24px;
+}
+
+.om-header-strip a {
+  color: inherit;
+  opacity: .85;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: opacity .15s, text-decoration-color .15s;
+}
+.om-header-strip a:hover { opacity: 1; text-decoration-color: currentColor; }
+
+/* Logo */
+.om-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: opacity .15s;
+}
+a.om-logo:hover { opacity: .7; }
+div.om-logo { user-select: none; }
+
+.om-logo-icon {
+  width: 34px;
+  height: 35px;
+  background: var(--c-accent);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: 0;
+  padding-bottom: 1px;
+  color: var(--c-bg);
+  flex-shrink: 0;
+}
+
+.om-logo-text {
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: -.03em;
+  color: var(--c-text);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.om-logo-png {
+  height: 40px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+}
+
+/* Nav */
+.om-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+
+.om-nav-link {
+  text-decoration: none;
+  white-space: nowrap;
+  position: relative;
+}
+.om-nav > .om-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--c-text-muted);
+  border-radius: var(--radius-sm);
+  transition: color var(--speed) var(--ease),
+              background var(--speed) var(--ease);
+}
+
+.om-nav > .om-nav-link:hover {
+  color: var(--c-text);
+  background: color-mix(in srgb, var(--c-text) 6%, transparent);
+}
+
+.om-nav > .om-nav-link.active {
+  color: var(--c-accent);
+  background: color-mix(in srgb, var(--c-accent) 10%, transparent);
+}
+
+/* ── Nav Hover Styles ── */
+
+/* 1. Animated underline — line grows from center */
+.om-nav-hover-1 .om-nav > .om-nav-link::after { content:''; position:absolute; bottom:2px; left:50%; width:0; height:2px; background:var(--c-accent); border-radius:2px; transition:width .25s ease, left .25s ease; }
+.om-nav-hover-1 .om-nav > .om-nav-link:hover { background:none; color:var(--c-text); }
+.om-nav-hover-1 .om-nav > .om-nav-link:hover::after { width:60%; left:20%; }
+
+/* 2. Pill highlight — soft accent pill */
+.om-nav-hover-2 .om-nav > .om-nav-link { border-radius:20px; }
+.om-nav-hover-2 .om-nav > .om-nav-link:hover { background:color-mix(in srgb, var(--c-accent) 12%, transparent); color:var(--c-accent); }
+
+/* 3. Clean accent text — just color shift */
+.om-nav-hover-3 .om-nav > .om-nav-link:hover { background:none; color:var(--c-accent); }
+
+/* 4. Soft bg — subtle background tint */
+.om-nav-hover-4 .om-nav > .om-nav-link { border-radius:6px; }
+.om-nav-hover-4 .om-nav > .om-nav-link:hover { background:color-mix(in srgb, var(--c-text) 8%, transparent); color:var(--c-text); }
+
+/* 5. Glow — soft text glow on hover */
+.om-nav-hover-5 .om-nav > .om-nav-link:hover { background:none; color:var(--c-accent); text-shadow:0 0 10px color-mix(in srgb, var(--c-accent) 40%, transparent); }
+
+/* 6. Full underline — line slides from left */
+.om-nav-hover-6 .om-nav > .om-nav-link::after { content:''; position:absolute; bottom:2px; left:0; width:0; height:2px; background:var(--c-accent); transition:width .2s ease; }
+.om-nav-hover-6 .om-nav > .om-nav-link:hover { background:none; color:var(--c-text); }
+.om-nav-hover-6 .om-nav > .om-nav-link:hover::after { width:100%; }
+
+/* 7. Thin underline — subtle 1px line appears */
+.om-nav-hover-7 .om-nav > .om-nav-link::after { content:''; position:absolute; bottom:4px; left:16px; right:16px; height:1px; background:var(--c-accent); opacity:0; transition:opacity .2s; }
+.om-nav-hover-7 .om-nav > .om-nav-link:hover { background:none; color:var(--c-accent); }
+.om-nav-hover-7 .om-nav > .om-nav-link:hover::after { opacity:1; }
+
+/* 8. Accent pill bg — filled rounded */
+.om-nav-hover-8 .om-nav > .om-nav-link { border-radius:6px; }
+.om-nav-hover-8 .om-nav > .om-nav-link:hover { background:color-mix(in srgb, var(--c-accent) 15%, transparent); color:var(--c-accent); }
+
+/* 9. Dot — small accent dot below */
+.om-nav-hover-9 .om-nav > .om-nav-link::after { content:''; position:absolute; bottom:2px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background:var(--c-accent); opacity:0; transition:opacity .2s; }
+.om-nav-hover-9 .om-nav > .om-nav-link:hover { background:none; color:var(--c-text); }
+.om-nav-hover-9 .om-nav > .om-nav-link:hover::after { opacity:1; }
+
+/* 10. Border bottom — clean 2px bottom line */
+.om-nav-hover-10 .om-nav > .om-nav-link::after { content:''; position:absolute; bottom:0; left:0; right:0; height:2px; background:var(--c-accent); transform:scaleX(0); transition:transform .2s ease; }
+.om-nav-hover-10 .om-nav > .om-nav-link:hover { background:none; color:var(--c-text); }
+.om-nav-hover-10 .om-nav > .om-nav-link:hover::after { transform:scaleX(1); }
+
+/* Lang Switcher */
+.om-lang-switch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+.om-lang-current {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  width: 36px;
+  height: 37px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  transition: opacity 0.154s;
+  padding: 0;
+}
+.om-lang-current:hover { opacity: 0.75; }
+.om-lang-current .om-lang-flag {
+  width: 33px;
+  height: 32px;
+}
+.om-lang-flag {
+  width: 21px;
+  height: 22px;
+  border-radius: 50%;
+  display: block;
+  object-fit: cover;
+  flex-shrink: 0;
+  aspect-ratio: 1;
+}
+.om-lang-code { text-transform: uppercase; letter-spacing: 0.041em; }
+.om-lang-arrow { font-size: 0.513rem; opacity: 0.5; transition: transform 0.194s; }
+.om-lang-switch:hover .om-lang-arrow { transform: rotate(178deg); }
+.om-lang-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  padding-top: 4px;
+  min-width: 164px;
+  background: var(--c-primary);
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.292);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.149s;
+  z-index: 200;
+}
+.om-lang-switch:hover .om-lang-dropdown {
+  opacity: 1;
+  pointer-events: auto;
+}
+.om-lang-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--c-text-muted);
+  text-decoration: none;
+  font-size: 0.814rem;
+  font-weight: 500;
+  transition: background 0.151s, color 0.154s;
+}
+.om-lang-option:hover { background: color-mix(in srgb, var(--c-text) 7%, transparent); color: var(--c-text); }
+.om-lang-option.active { color: var(--c-accent); }
+
+/* Legacy */
+.om-nav-underline .om-nav-link { border-radius: 0; border-bottom: 2px solid transparent; padding-bottom: 6px; }
+.om-nav-underline .om-nav-link:hover { background: none; border-bottom-color: var(--c-border); }
+.om-nav-underline .om-nav-link.active { background: none; border-bottom-color: var(--c-accent); }
+
+/* CTA group */
+.om-header-cta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* Mobile menu button */
+.om-menu-btn {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background var(--speed) var(--ease);
+}
+.om-menu-btn:hover { background: color-mix(in srgb, var(--c-text) 8%, transparent); }
+.om-menu-btn span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--c-text);
+  border-radius: 2px;
+  transition: transform var(--speed) var(--ease), opacity var(--speed) var(--ease);
+}
+.om-menu-btn.open span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
+.om-menu-btn.open span:nth-child(2) { opacity: 0; }
+.om-menu-btn.open span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
+
+/* Mobile drawer */
+.om-mobile-nav {
+  display: none;
+  flex-direction: column;
+  background: var(--c-primary);
+  border-top: 1px solid var(--c-border);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.224);
+}
+.om-mobile-nav.open { display: flex; }
+
+/* ── Mobile header policy (framework override) ───────────────────
+   Keep Login / Register / Lang switcher visible on mobile across ALL
+   30+ header variants. Components historically hid their `*-desktop`
+   action groups behind a hamburger; the framework now wins and forces
+   them visible inline so brand-critical actions never require a tap
+   to reveal. Buttons shrink to fit narrow viewports.
+
+   Selector permissiveness:
+   - `[class*="cta-desktop"]` substring match covers BOTH hyphen- and
+     underscore-separated prefixes (`.rp50-cta-desktop` AND `.h18_cta-desktop`).
+   - No `.om-header` ancestor scope: 3 header variants (h11/h14/h21)
+     don't use the `om-header` class. The class names below are
+     specific enough that we don't need parent scoping. */
+@media (max-width: 768px) {
+  body [class*="cta-desktop"],
+  body [class*="actions-desktop"],
+  body [class*="btns-desktop"],
+  body [class*="cta-wrap"],
+  body [class*="login-actions"],
+  body [class*="strip-actions"] {
+    display: flex !important;
+    align-items: center;
+    gap: 6px !important;
+  }
+  body [class*="cta-desktop"] .om-btn,
+  body [class*="actions-desktop"] .om-btn,
+  body [class*="btns-desktop"] .om-btn,
+  body [class*="cta-wrap"] .om-btn,
+  body [class*="cta-desktop"] button,
+  body [class*="actions-desktop"] button,
+  body [class*="btns-desktop"] button,
+  body [class*="cta-wrap"] button,
+  body [class*="cta-desktop"] a,
+  body [class*="actions-desktop"] a,
+  body [class*="btns-desktop"] a,
+  body [class*="cta-wrap"] a {
+    padding: 7px 12px !important;
+    font-size: 11px !important;
+  }
+  /* Lang switcher stays compact on mobile too */
+  .om-lang-switch, .om-lang-current {
+    font-size: 12px !important;
+  }
+}
+.om-mobile-nav .om-container { padding-top: 8px; padding-bottom: 8px; }
+.om-mobile-nav .om-nav { display: flex; flex-direction: column; gap: 2px; }
+.om-mobile-nav .om-nav-link {
+  display: block;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.962rem;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--c-text) 75%, transparent);
+  text-decoration: none;
+  transition: background 0.151s, color 0.153s;
+}
+.om-mobile-nav .om-nav-link:hover {
+  background: color-mix(in srgb, var(--c-text) 7%, transparent);
+  color: var(--c-text);
+}
+
+/* ── 11. HERO ────────────────────────────────────────────────── */
+.om-hero {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--c-grad-start) 0%, var(--c-grad-end) 100%);
+}
+
+.om-hero-inner {
+  position: relative;
+  z-index: 1;
+  /* Vertical-only padding — using shorthand `padding: 48px 0` would also
+     wipe out the horizontal padding (27px / 16px) that .om-container
+     provides on the SAME element, leaving hero text flush against the
+     viewport edge on mobile. Set top/bottom explicitly so horizontal
+     padding inherited from .om-container stays intact. */
+  padding-top: 48px;
+  padding-bottom: 47px;
+}
+
+/* Decorative bg mesh */
+.om-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 50%, color-mix(in srgb, var(--c-accent) 8%, transparent), transparent),
+    radial-gradient(ellipse 40% 40% at 80% 20%, color-mix(in srgb, var(--c-btn) 6%, transparent), transparent);
+  pointer-events: none;
+}
+
+.om-hero-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 49px;
+}
+
+.om-hero-center { text-align: center; max-width: 762px; margin: 0 auto; }
+
+/* ── 12. DIVIDERS ────────────────────────────────────────────── */
+.om-divider     { height: 1px; background: var(--c-border); }
+.om-divider-v   { width: 1px; height: auto; align-self: stretch; background: var(--c-border); flex-shrink: 0; }
+
+.om-divider-accent {
+  height: 2px;
+  background: linear-gradient(92deg, transparent, var(--c-accent), transparent);
+}
+
+.om-section-break {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+}
+.om-section-break::before,
+.om-section-break::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--c-border));
+}
+.om-section-break::after {
+  background: linear-gradient(267deg, transparent, var(--c-border));
+}
+
+/* ── 13. SCROLL STRIP (game cards, etc.) ─────────────────────── */
+.om-scroll-strip {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px 0 12px;
+}
+
+.om-scroll-strip::-webkit-scrollbar { height: 3px; }
+.om-scroll-strip::-webkit-scrollbar-track { background: var(--c-surface); border-radius: 2px; }
+.om-scroll-strip::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 2px; }
+
+.om-scroll-strip > * { scroll-snap-align: start; flex-shrink: 0; }
+
+/* ── 14. GAME CARD ───────────────────────────────────────────── */
+.om-game-card {
+  width: 154px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color var(--speed) var(--ease),
+              transform var(--speed) var(--ease),
+              box-shadow var(--speed) var(--ease);
+  cursor: pointer;
+}
+
+.om-game-card:hover {
+  border-color: var(--c-accent);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--c-accent) 15%, transparent);
+}
+
+.om-game-thumb {
+  height: 96px;
+  background: linear-gradient(133deg, var(--c-primary), var(--c-secondary));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 37px;
+  position: relative;
+  overflow: hidden;
+}
+
+.om-game-thumb-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.574);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--speed) var(--ease);
+  backdrop-filter: blur(2px);
+}
+
+.om-game-card:hover .om-game-thumb-overlay { opacity: 1; }
+
+.om-play-btn {
+  width: 42px;
+  height: 41px;
+  border-radius: 50%;
+  background: var(--c-btn);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-btn-text);
+  font-size: 16px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+  transition: transform var(--speed-fast) var(--ease-spring);
+}
+.om-play-btn:hover { transform: scale(1.1); }
+
+.om-game-info { padding: 10px 12px 12px; }
+
+.om-game-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.om-game-provider {
+  font-size: 11px;
+  color: var(--c-text-muted);
+  margin-top: 3px;
+}
+
+/* ── 15. PROGRESS BAR ────────────────────────────────────────── */
+.om-progress {
+  height: 5px;
+  background: color-mix(in srgb, var(--c-border) 80%, transparent);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.om-progress-fill {
+  height: 100%;
+  background: linear-gradient(92deg, var(--c-accent), color-mix(in srgb, var(--c-accent) 70%, var(--c-btn)));
+  border-radius: var(--radius-full);
+  transition: width .8s var(--ease);
+}
+
+.om-progress-thin { height: 3px; }
+.om-progress-thick { height: 8px; }
+
+/* ── 16. STATS ───────────────────────────────────────────────── */
+.om-stat-value {
+  font-size: 37px;
+  font-weight: 900;
+  letter-spacing: -.04em;
+  color: var(--c-accent);
+  line-height: 1;
+}
+
+.om-stat-label {
+  font-size: 12px;
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  margin-top: 6px;
+}
+
+/* ── 17. COUNTDOWN ───────────────────────────────────────────── */
+.om-countdown {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.om-countdown-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: color-mix(in srgb, var(--c-bg) 80%, transparent);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  padding: 12px 18px;
+  min-width: 68px;
+  backdrop-filter: blur(8px);
+}
+
+.om-countdown-num {
+  font-size: 33px;
+  font-weight: 900;
+  letter-spacing: -.04em;
+  color: var(--c-accent);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.om-countdown-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: var(--c-text-muted);
+  margin-top: 5px;
+}
+
+.om-countdown-sep {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--c-text-muted);
+  margin-top: -10px;
+  opacity: .5;
+}
+
+/* ── 18. RATING ──────────────────────────────────────────────── */
+.om-stars { color: #f59e0b; font-size: 15px; letter-spacing: 1px; }
+.om-score {
+  font-size: 39px;
+  font-weight: 900;
+  letter-spacing: -.04em;
+  color: var(--c-accent);
+  line-height: 1;
+}
+.om-score-sm { font-size: 24px; }
+
+/* ── 19. PAYMENT PILLS ───────────────────────────────────────── */
+.om-payment-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.om-payment-pill {
+  padding: 5px 14px;
+  background: color-mix(in srgb, var(--c-surface) 80%, transparent);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-text-muted);
+  transition: border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+.om-payment-pill:hover { border-color: var(--c-accent); color: var(--c-text); }
+
+/* Payment icon (SVG / PNG) rendered in the footer. Without an explicit
+   size, SVGs shipped without intrinsic width/height attributes expand
+   to fill the parent — turning a single BTC logo into a full-screen
+   takeover. Fixed height + auto width keeps every icon visually
+   consistent regardless of their natural dimensions, and the
+   surrounding `.om-payment-pills` flex container handles wrapping.
+
+   White pill background because our colored brand SVGs (Visa blue, MC
+   red/yellow, Bitcoin orange, PayPal navy+cyan, etc.) are designed for
+   light surfaces — dropping them on a dark casino footer kills the
+   contrast. A near-white pill with subtle 92 % opacity lets the dark
+   footer tone show through just enough to sit comfortably, without
+   washing out the icon's own colours. */
+.om-pay-logo {
+  height: 22px;
+  width: auto;
+  max-width: 55px;
+  display: inline-block;
+  object-fit: contain;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.927);
+  border: 1px solid rgba(0, 0, 0, 0.052);
+  border-radius: 6px;
+  box-sizing: content-box;
+  transition: transform var(--speed) var(--ease), box-shadow var(--speed) var(--ease);
+}
+.om-pay-logo:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.21);
+}
+
+/* ── 20. INPUT ───────────────────────────────────────────────── */
+.om-input {
+  width: 100%;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  padding: 13px 17px;
+  font-size: 14px;
+  color: var(--c-text);
+  outline: none;
+  transition: border-color var(--speed) var(--ease),
+              box-shadow var(--speed) var(--ease);
+}
+
+.om-input:focus {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-accent) 18%, transparent);
+}
+
+.om-input::placeholder { color: var(--c-text-muted); }
+
+/* Input + button inline */
+.om-input-group {
+  display: flex;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color var(--speed) var(--ease);
+}
+.om-input-group:focus-within { border-color: var(--c-accent); }
+.om-input-group .om-input {
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  flex: 1;
+}
+.om-input-group .om-btn { border-radius: 0; border: none; }
+
+/* ── 21. TABLE ───────────────────────────────────────────────── */
+.om-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.om-table th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--c-text-muted);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.om-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-border) 50%, transparent);
+  color: var(--c-text);
+}
+
+.om-table tr:hover td { background: color-mix(in srgb, var(--c-surface) 50%, transparent); }
+.om-table tr:last-child td { border-bottom: none; }
+
+/* ── 22. TABS ────────────────────────────────────────────────── */
+.om-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  padding: 4px;
+}
+
+.om-tab {
+  flex: 1;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text-muted);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all var(--speed) var(--ease);
+  text-align: center;
+  border: 1px solid transparent;
+}
+
+.om-tab:hover { color: var(--c-text); background: color-mix(in srgb, var(--c-text) 6%, transparent); }
+
+.om-tab.active {
+  background: var(--c-accent);
+  color: var(--c-bg);
+  font-weight: 700;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--c-accent) 40%, transparent);
+}
+
+/* Simple underline tabs */
+.om-tabs-underline {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--c-border);
+  padding: 0;
+  background: none;
+  border-radius: 0;
+}
+
+.om-tabs-underline .om-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 10px 20px;
+  margin-bottom: -1px;
+}
+
+.om-tabs-underline .om-tab.active {
+  background: none;
+  color: var(--c-accent);
+  border-bottom-color: var(--c-accent);
+  box-shadow: none;
+}
+
+/* ── 23. SLIDER ──────────────────────────────────────────────── */
+.om-slider {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+}
+
+.om-slider-track {
+  display: flex;
+  transition: transform .5s var(--ease);
+  will-change: transform;
+}
+
+.om-slide {
+  min-width: 100%;
+}
+
+.om-slider-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  padding: 0 12px;
+}
+
+.om-slider-btn {
+  width: 43px;
+  height: 42px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--c-bg) 80%, transparent);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: all;
+  transition: background var(--speed) var(--ease), transform var(--speed-fast) var(--ease);
+  backdrop-filter: blur(8px);
+  font-size: 18px;
+}
+.om-slider-btn:hover { background: var(--c-accent); color: var(--c-bg); transform: scale(1.05); }
+.om-slider-btn:disabled { opacity: .3; cursor: not-allowed; }
+
+.om-slider-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.om-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-border);
+  cursor: pointer;
+  transition: background var(--speed) var(--ease),
+              width var(--speed) var(--ease);
+  border: none;
+}
+.om-dot.active { width: 24px; border-radius: 4px; background: var(--c-accent); }
+
+/* ── 24. FOOTER ──────────────────────────────────────────────── */
+.om-footer {
+  background: var(--c-primary);
+  border-top: 1px solid var(--c-border);
+  padding: 49px 0 28px;
+}
+
+.om-footer-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  gap: 40px;
+  padding-bottom: 36px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.om-footer-brand p {
+  font-size: 14px;
+  color: var(--c-text-muted);
+  line-height: 1.7;
+  margin-top: 14px;
+  max-width: 282px;
+}
+
+.om-footer-col h4 {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--c-text-muted);
+  margin-bottom: 16px;
+}
+
+.om-footer-links { display: flex; flex-direction: column; gap: 10px; }
+.om-footer-link {
+  font-size: 14px;
+  color: var(--c-text-muted);
+  transition: color var(--speed) var(--ease);
+}
+.om-footer-link:hover { color: var(--c-accent); }
+
+.om-footer-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-top: 24px;
+}
+
+.om-footer-legal {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--c-text-muted) 60%, transparent);
+  line-height: 1.7;
+  max-width: 805px;
+}
+
+/* ── 25. UTILITY HELPERS ─────────────────────────────────────── */
+.om-hidden       { display: none !important; }
+.om-sr-only      { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+
+.om-mt-1 { margin-top: 8px; }
+.om-mt-2 { margin-top: 16px; }
+.om-mt-3 { margin-top: 28px; }
+.om-mt-4 { margin-top: 49px; }
+.om-mb-1 { margin-bottom: 8px; }
+.om-mb-2 { margin-bottom: 16px; }
+.om-mb-3 { margin-bottom: 29px; }
+
+/* ── 26. SCROLL-TRIGGERED ANIMATIONS ────────────────────────── */
+[data-animate] {
+  opacity: 0;
+  transform: translateY(21px);
+  transition: opacity .55s var(--ease), transform .55s var(--ease);
+}
+
+[data-animate].om-visible {
+  opacity: 1;
+  transform: none;
+}
+
+[data-animate="fade"] { transform: none; }
+[data-animate="left"]  { transform: translateX(-24px); }
+[data-animate="right"] { transform: translateX(24px); }
+[data-animate="scale"] { transform: scale(.92); }
+
+/* Delay helpers */
+[data-delay="1"] { transition-delay: .1s; }
+[data-delay="2"] { transition-delay: .2s; }
+[data-delay="3"] { transition-delay: .3s; }
+[data-delay="4"] { transition-delay: .4s; }
+
+/* ── 27. KEYFRAME ANIMATIONS ─────────────────────────────────── */
+@keyframes om-pulse-badge {
+  0%, 100% { box-shadow: 0 0 8px rgba(220,38,38,0.487); }
+  50%       { box-shadow: 0 0 20px rgba(220,38,38,0.816); }
+}
+
+@keyframes om-pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%       { transform: scale(1.5); opacity: .6; }
+}
+
+@keyframes om-glow {
+  0%, 100% { box-shadow: 0 0 12px color-mix(in srgb, var(--c-accent) 25%, transparent); }
+  50%       { box-shadow: 0 0 32px color-mix(in srgb, var(--c-accent) 55%, transparent); }
+}
+
+@keyframes om-float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-8px); }
+}
+
+@keyframes om-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+@keyframes om-spin {
+  to { transform: rotate(356deg); }
+}
+
+@keyframes om-marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes om-count {
+  from { opacity: 0; transform: scale(.7); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.om-animate-glow   { animation: om-glow   2.005s ease-in-out infinite; }
+.om-animate-float  { animation: om-float  2.941s ease-in-out infinite; }
+.om-animate-spin   { animation: om-spin   7.995s linear infinite; }
+.om-animate-marquee { animation: om-marquee 19.438s linear infinite; }
+
+/* Skeleton loader */
+.om-skeleton {
+  background: linear-gradient(91deg,
+    var(--c-surface) 25%,
+    color-mix(in srgb, var(--c-surface) 60%, var(--c-border)) 50%,
+    var(--c-surface) 75%);
+  background-size: 200% 100%;
+  animation: om-shimmer 1.462s infinite;
+  border-radius: var(--radius);
+}
+
+/* ── 28. SPECIAL EFFECTS ─────────────────────────────────────── */
+
+/* Glass card */
+.om-glass {
+  background: color-mix(in srgb, var(--c-surface) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-text) 12%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Neon glow border */
+.om-neon {
+  border-color: var(--c-accent) !important;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--c-accent) 40%, transparent),
+              0 0 41px color-mix(in srgb, var(--c-accent) 15%, transparent),
+              inset 0 0 19px color-mix(in srgb, var(--c-accent) 5%, transparent);
+}
+
+/* Gradient border trick */
+.om-grad-border {
+  position: relative;
+  border: none !important;
+}
+.om-grad-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(132deg, var(--c-accent), var(--c-btn));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: destination-out;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ── 29. RESPONSIVE ──────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .om-container { padding: 0 20px; }
+  .om-grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .om-footer-grid { grid-template-columns: 1fr 1fr; gap: 29px; }
+  .om-hero-split { grid-template-columns: 1fr; gap: 35px; }
+}
+
+@media (max-width: 768px) {
+  .om-container { padding: 0 16px; }
+  .om-section { padding-top: 52px; padding-bottom: 52px; }
+  .om-section-sm { padding-top: 36px; padding-bottom: 37px; }
+
+  .om-grid-2, .om-grid-3, .om-grid-4 { grid-template-columns: 1fr; }
+
+  .om-nav { display: none; }
+  .om-menu-btn { display: flex; }
+
+  .om-header-inner { height: 58px; }
+  .om-logo-text { font-size: 16px; }
+
+  .om-footer-grid { grid-template-columns: 1fr; gap: 23px; }
+  .om-footer-bottom { flex-direction: column; align-items: flex-start; }
+
+  .om-hero-inner { padding-top: 57px; padding-bottom: 55px; }
+  .om-h1 { font-size: 32px; }
+  .om-h2 { font-size: 26px; }
+
+  .om-countdown-box { padding: 10px 12px; min-width: 54px; }
+  .om-countdown-num { font-size: 24px; }
+
+  .om-tabs { flex-wrap: wrap; }
+}
+
+@media (max-width: 480px) {
+  .om-btn { padding: 11px 21px; }
+  .om-btn-lg { padding: 14px 32px; font-size: 15px; }
+  .om-btn-xl { padding: 16px 36px; font-size: 16px; }
+  .om-stat-value { font-size: 30px; }
+  .om-score { font-size: 31px; }
+}
